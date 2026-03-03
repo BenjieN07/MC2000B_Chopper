@@ -1,88 +1,38 @@
-import serial
+from thorlabs_mc2000b import MC2000B  # package name
+# If your import is different in your environment, try:
+# from thorlabs_mc2000b.mc2000b import MC2000B
 
-PORT = "COM4"      # your chopper port
-BAUD = 115200
-TIMEOUT = 5.0
-
-def query(ser: serial.Serial, cmd: str, read_n: int = 64) -> bytes:
-    """
-    Send command terminated with CR and read back a fixed number of bytes.
-    Returns raw bytes so you can debug what the device actually sent.
-    """
-    if not cmd.endswith("\r"):
-        cmd += "\r"
-    ser.reset_input_buffer()
-    ser.write(cmd.encode("ascii"))
-    resp = ser.read(read_n)
-    return resp
-
-def parse_numeric(resp: bytes) -> float:
-    """
-    Extract the first number found in the response.
-    This is robust against extra chars like prompts, CR/LF, etc.
-    """
-    text = resp.decode(errors="ignore")
-    # Keep digits, decimal point, sign; split on anything else
-    token = ""
-    for ch in text:
-        if ch.isdigit() or ch in ".-+":
-            token += ch
-        elif token:
-            break
-    if not token:
-        raise ValueError(f"Could not parse number from response: {text!r}")
-    return float(token)
+PORT = "COM4"
 
 def main():
-    print(f"Connecting to {PORT} @ {BAUD}...")
-    with serial.Serial(
-        port=PORT,
-        baudrate=BAUD,
-        timeout=TIMEOUT,
-        bytesize=serial.EIGHTBITS,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE,
-        xonxoff=False,
-        rtscts=False,
-        dsrdtr=False,
-    ) as ser:
+    print(f"Connecting to MC2000B on {PORT} ...")
 
-        # Same “wake up” trick as the GitHub code
-        ser.write(b"\r")
-        _ = ser.read(100)
+    ch = MC2000B(serial_port=PORT)  # this will run id? internally and verify it's MC2000B
+    print("✅ Connected!")
+    print("ID string:", ch.id)
 
-        # --- Queries (same commands as chopper_controller.py) ---
-        # Internal frequency
-        raw = query(ser, "freq?", read_n=64)
-        intfreq = parse_numeric(raw)
-        print(f"freq?   raw={raw!r}")
-        print(f"Internal frequency: {intfreq:.3f} Hz\n")
+    # Read/print some values to confirm communications are working
+    print("\n--- Live readback ---")
+    print("Blade:", ch.get_blade_string(), f"(blade index={ch.blade})")
+    print("Input reference:", ch.get_inref_string(), f"(ref index={ch.ref})")
+    print("Output reference:", ch.get_outref_string(), f"(output index={ch.output})")
+    print("Internal frequency (freq):", ch.freq, "Hz")
+    print("External input frequency (input):", ch.input, "Hz")
+    print("Reference output frequency (refoutfreq):", ch.refoutfreq, "Hz")
+    print("Enable (enable):", ch.enable, "(0=still, 1=running)")
 
-        # Running/still status (enable? -> 0 or 1)
-        raw = query(ser, "enable?", read_n=64)
-        enable = parse_numeric(raw)
-        print(f"enable? raw={raw!r}")
-        print(f"Enable status: {int(enable)} (0=still, 1=running)\n")
+    # Optional: toggle enable briefly to prove we can control it (comment out if you don't want motion)
+    print("\n--- Control test: toggle enable ---")
+    prev = ch.enable
+    ch.enable = 1
+    print("Set enable=1 ->", ch.enable)
+    ch.enable = 0
+    print("Set enable=0 ->", ch.enable)
+    ch.enable = prev
+    print("Restored enable ->", ch.enable)
 
-        # Blade index/type (blade?)
-        raw = query(ser, "blade?", read_n=64)
-        blade = parse_numeric(raw)
-        print(f"blade?  raw={raw!r}")
-        print(f"Blade index: {int(blade)}\n")
-
-        # Reference mode (ref?) 0=internal, 1=external (per the GitHub code design)
-        raw = query(ser, "ref?", read_n=64)
-        ref = parse_numeric(raw)
-        print(f"ref?    raw={raw!r}")
-        print(f"Reference mode: {int(ref)} (0=internal, 1=external)\n")
-
-        # External reference input frequency (input?)
-        raw = query(ser, "input?", read_n=64)
-        exfreq = parse_numeric(raw)
-        print(f"input?  raw={raw!r}")
-        print(f"External input frequency: {exfreq:.3f} Hz\n")
-
-    print("Done. (Port closed)")
+    ch.close()
+    print("\nPort closed. Done.")
 
 if __name__ == "__main__":
     main()
