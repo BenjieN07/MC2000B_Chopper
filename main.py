@@ -9,21 +9,6 @@ DEFAULT_PORT = "COM4"
 
 
 class MC2000BCleanGUI(tk.Tk):
-    """
-    Clean MC2000B GUI:
-      - No blade selection list (assume one blade)
-      - Left readout panel clearly shows:
-          * Actual Frequency (panel-like)
-          * Target Frequency (setpoint)
-          * External Input Frequency (REF IN)
-          * Ref-Out Frequency (REF OUT)
-      - Right controls similar to Thorlabs utility:
-          Output: Target/Inner/Outer
-          Reference: INT/EXT inner/outer
-          Mult/Div, Phase, Target Frequency, Cycle
-          Start/Stop
-    """
-
     def __init__(self):
         super().__init__()
         self.title("MC2000B Control Utility (Clean)")
@@ -59,7 +44,7 @@ class MC2000BCleanGUI(tk.Tk):
         self.dharm_var = tk.IntVar(value=1)
 
         self.phase_var = tk.IntVar(value=180)
-        self.target_set_var = tk.IntVar(value=305)                 # what user edits on right
+        self.target_set_var = tk.IntVar(value=305)                 # user setpoint on right
         self.cycle_var = tk.IntVar(value=1)
 
         # Console
@@ -112,11 +97,11 @@ class MC2000BCleanGUI(tk.Tk):
         right = ttk.Frame(main, style="Panel.TFrame")
         right.pack(side="right", fill="both", expand=True)
 
-        # Left readout cards (explicit labels)
-        self._readout_card(left, "Actual Frequency (Hz)  — panel-like (0 when stopped)", self.actual_freq_var, "Hz", big=True)
-        self._readout_card(left, "Target Frequency (Hz)  — setpoint", self.target_freq_var, "Hz", big=False)
-        self._readout_card(left, "External Input Frequency (Hz)  — REF IN", self.ext_in_var, "Hz", big=False)
-        self._readout_card(left, "Ref-Out Frequency (Hz)  — REF OUT", self.ref_out_var, "Hz", big=False)
+        # Left readout cards
+        self._readout_card(left, "Actual Frequency (Hz) — panel-like (0 when stopped)", self.actual_freq_var, "Hz", big=True)
+        self._readout_card(left, "Target Frequency (Hz) — setpoint", self.target_freq_var, "Hz", big=False)
+        self._readout_card(left, "External Input Frequency (Hz) — REF IN", self.ext_in_var, "Hz", big=False)
+        self._readout_card(left, "Ref-Out Frequency (Hz) — REF OUT", self.ref_out_var, "Hz", big=False)
 
         status_box = ttk.LabelFrame(left, text="Status")
         status_box.pack(fill="x", padx=10, pady=(8, 10))
@@ -126,15 +111,23 @@ class MC2000BCleanGUI(tk.Tk):
         self._kv(status_box, "In Ref:", self.inref_text_var, 2)
         self._kv(status_box, "Out Ref:", self.outref_text_var, 3)
 
-        # Right controls area
-        content = ttk.Frame(right, style="Panel.TFrame")
-        content.pack(fill="both", expand=True, padx=10, pady=10)
-        content.grid_columnconfigure(1, weight=1)
-        content.grid_rowconfigure(2, weight=1)
+        # Right side layout using PACK so Start/Stop never disappears
+        right_inner = ttk.Frame(right, style="Panel.TFrame")
+        right_inner.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Output group
-        out_box = ttk.LabelFrame(content, text="Output (REF OUT source)")
-        out_box.grid(row=0, column=0, sticky="nw", padx=(0, 10), pady=(0, 10))
+        # Row 1: Output + Reference on left, sliders on right
+        top_row = ttk.Frame(right_inner, style="Panel.TFrame")
+        top_row.pack(fill="x")
+
+        left_controls = ttk.Frame(top_row, style="Panel.TFrame")
+        left_controls.pack(side="left", fill="y", padx=(0, 10))
+
+        sliders = ttk.Frame(top_row, style="Panel.TFrame")
+        sliders.pack(side="left", fill="x", expand=True)
+
+        # Output
+        out_box = ttk.LabelFrame(left_controls, text="Output (REF OUT source)")
+        out_box.pack(fill="x", pady=(0, 10))
 
         ttk.Radiobutton(out_box, text="Target", variable=self.output_sel, value="target",
                         command=self.apply_output).grid(row=0, column=0, sticky="w", padx=10, pady=6)
@@ -143,9 +136,9 @@ class MC2000BCleanGUI(tk.Tk):
         ttk.Radiobutton(out_box, text="Outer", variable=self.output_sel, value="outer",
                         command=self.apply_output).grid(row=0, column=1, sticky="w", padx=10, pady=6)
 
-        # Reference group
-        ref_box = ttk.LabelFrame(content, text="Reference (lock source)")
-        ref_box.grid(row=1, column=0, sticky="nw", padx=(0, 10), pady=(0, 10))
+        # Reference
+        ref_box = ttk.LabelFrame(left_controls, text="Reference (lock source)")
+        ref_box.pack(fill="x")
 
         ttk.Radiobutton(ref_box, text="INT Outer", variable=self.ref_sel, value="internal-outer",
                         command=self.apply_inref).grid(row=0, column=0, sticky="w", padx=10, pady=6)
@@ -166,31 +159,21 @@ class MC2000BCleanGUI(tk.Tk):
         ttk.Entry(md, textvariable=self.dharm_var, width=6).grid(row=1, column=2, sticky="w", padx=(0, 6))
         ttk.Button(md, text="Apply", command=self.apply_harmonics).grid(row=1, column=3, sticky="w", padx=(8, 0))
 
-        # Right side sliders
-        sliders = ttk.Frame(content, style="Panel.TFrame")
-        sliders.grid(row=0, column=1, rowspan=2, sticky="new", pady=(0, 10))
+        # Sliders (right side)
+        self._slider_block(sliders, title="Phase (Degrees)", var=self.phase_var, from_=0, to=360, apply_cmd=self.apply_phase)
+        self._slider_block(sliders, title="Target Frequency (Hz)", var=self.target_set_var, from_=1, to=10000, apply_cmd=self.apply_target_freq)
+        self._slider_block(sliders, title="Cycle (%)", var=self.cycle_var, from_=1, to=50, apply_cmd=self.apply_cycle)
 
-        self._slider_block(sliders, title="Phase (Degrees)", var=self.phase_var,
-                           from_=0, to=360, apply_cmd=self.apply_phase)
+        # Row 2: Start/Stop (always visible)
+        run_row = ttk.Frame(right_inner, style="Panel.TFrame")
+        run_row.pack(fill="x", pady=(10, 6))
 
-        # IMPORTANT: This sets TARGET frequency. When you Apply, target_freq_var should change.
-        self._slider_block(sliders, title="Target Frequency (Hz)", var=self.target_set_var,
-                           from_=1, to=10000, apply_cmd=self.apply_target_freq)
+        ttk.Button(run_row, text="Start", style="Accent.TButton", command=self.start).pack(side="left", padx=(0, 8))
+        ttk.Button(run_row, text="Stop", command=self.stop).pack(side="left")
 
-        self._slider_block(sliders, title="Cycle (%)", var=self.cycle_var,
-                           from_=1, to=50, apply_cmd=self.apply_cycle)
-
-        # Start / Stop
-        run_box = ttk.Frame(content, style="Panel.TFrame")
-        run_box.grid(row=2, column=0, columnspan=2, sticky="nw", pady=(0, 10))
-
-        ttk.Button(run_box, text="Start", style="Accent.TButton", command=self.start).pack(side="left", padx=(0, 8))
-        ttk.Button(run_box, text="Stop", command=self.stop).pack(side="left")
-
-        # Console
-        console_box = ttk.LabelFrame(content, text="Console")
-        console_box.grid(row=3, column=0, columnspan=2, sticky="nsew")
-        content.grid_rowconfigure(3, weight=1)
+        # Row 3: Console
+        console_box = ttk.LabelFrame(right_inner, text="Console")
+        console_box.pack(fill="both", expand=True)
 
         self.console = tk.Text(console_box, height=10, wrap="word",
                                bg="white", fg="#111", insertbackground="#111")
@@ -229,20 +212,19 @@ class MC2000BCleanGUI(tk.Tk):
         ttk.Button(top, text="Apply", command=lambda e=entry: apply_cmd(e.get())).pack(side="right", padx=(0, 8))
 
         s = ttk.Scale(box, from_=from_, to=to, orient="horizontal",
-                      command=lambda _v, e=entry, v=var: self._sync_scale_entry(v, e))
+                      command=lambda _v, e=entry: self._sync_entry_from_scale(e, _v))
         s.set(var.get())
         s.pack(fill="x", padx=10, pady=(0, 10))
 
-    def _sync_scale_entry(self, var, entry):
-        # update entry to current var (var already changes via tk)
+    def _sync_entry_from_scale(self, entry, v):
         try:
-            val = int(float(var.get()))
+            val = int(float(v))
         except Exception:
             return
         entry.delete(0, "end")
         entry.insert(0, str(val))
 
-    # ---------------- Logging ----------------
+    # ---------- logging ----------
     def _log(self, msg: str):
         self.console.insert("end", msg)
         self.console.see("end")
@@ -250,7 +232,7 @@ class MC2000BCleanGUI(tk.Tk):
     def _ts(self):
         return datetime.now().strftime("%H:%M:%S")
 
-    # ---------------- Polling ----------------
+    # ---------- polling ----------
     def _start_poll(self):
         self._stop_poll()
         self._poll_job = self.after(self.poll_ms, self._poll_tick)
@@ -267,7 +249,7 @@ class MC2000BCleanGUI(tk.Tk):
         self.refresh_once(log_it=False)
         self._poll_job = self.after(self.poll_ms, self._poll_tick)
 
-    # ---------------- Connect / Disconnect ----------------
+    # ---------- connect/disconnect ----------
     def connect(self):
         if self.ch is not None:
             return
@@ -277,7 +259,6 @@ class MC2000BCleanGUI(tk.Tk):
             self.status_var.set(f"Connected ({port})")
             self.id_var.set(self.ch.id)
             self._log(f"[{self._ts()}] Connected: {self.ch.id}\n")
-
             self._sync_controls_from_device()
             self.refresh_once(log_it=False)
             self._start_poll()
@@ -300,7 +281,6 @@ class MC2000BCleanGUI(tk.Tk):
         self.id_var.set("—")
         self._log(f"[{self._ts()}] Disconnected\n")
 
-        # clear readouts
         for v in (
             self.actual_freq_var, self.target_freq_var, self.ext_in_var, self.ref_out_var,
             self.enable_text_var, self.blade_text_var, self.inref_text_var, self.outref_text_var
@@ -311,14 +291,13 @@ class MC2000BCleanGUI(tk.Tk):
         self.disconnect()
         self.destroy()
 
-    # ---------------- Sync from device ----------------
+    # ---------- sync ----------
     def _sync_controls_from_device(self):
         if self.ch is None:
             return
         try:
             self.output_sel.set(self.ch.get_outref_string())
             self.ref_sel.set(self.ch.get_inref_string())
-
             self.phase_var.set(int(self.ch.phase))
             self.target_set_var.set(int(self.ch.freq))
             self.cycle_var.set(int(self.ch.oncycle))
@@ -327,51 +306,40 @@ class MC2000BCleanGUI(tk.Tk):
         except Exception as e:
             self._log(f"[{self._ts()}] WARN sync: {e}\n")
 
-    # ---------------- Refresh readouts ----------------
+    # ---------- refresh ----------
     def refresh_once(self, log_it: bool):
         if self.ch is None:
             return
         try:
             enable = int(self.ch.enable)
-            target = int(self.ch.freq)          # TARGET / setpoint
-            refout = int(self.ch.refoutfreq)    # measured-ish (REF OUT frequency)
-            extin = int(self.ch.input)          # external input frequency
-
-            # Make sure if there is no external input it reads 0 (device should already do this)
+            target = int(self.ch.freq)
+            refout = int(self.ch.refoutfreq)
+            extin = int(self.ch.input)
             if extin < 0:
                 extin = 0
 
-            # PANEL-LIKE actual frequency:
-            # stopped -> 0, running -> refout (fallback target if refout 0)
-            if enable == 0:
-                actual_panel = 0
-            else:
-                actual_panel = refout if refout > 0 else target
+            actual_panel = 0 if enable == 0 else (refout if refout > 0 else target)
 
-            # Update left readouts
             self.actual_freq_var.set(str(actual_panel))
             self.target_freq_var.set(str(target))
             self.ext_in_var.set(str(extin))
             self.ref_out_var.set(str(refout))
 
-            # Status box
             self.enable_text_var.set("RUNNING" if enable == 1 else "STOPPED")
             self.blade_text_var.set(self.ch.get_blade_string())
             self.inref_text_var.set(self.ch.get_inref_string())
             self.outref_text_var.set(self.ch.get_outref_string())
 
-            # Keep radio controls synced to device
+            # keep buttons synced
             self.output_sel.set(self.ch.get_outref_string())
             self.ref_sel.set(self.ch.get_inref_string())
 
             if log_it:
-                self._log(
-                    f"[{self._ts()}] Refresh: enable={enable}, target={target}, actual(refout)={refout}, extin={extin}\n"
-                )
+                self._log(f"[{self._ts()}] Refresh: enable={enable}, target={target}, refout={refout}, extin={extin}\n")
         except Exception as e:
             self._log(f"[{self._ts()}] ERROR refresh: {e}\n")
 
-    # ---------------- Apply controls ----------------
+    # ---------- apply controls ----------
     def apply_output(self):
         if self.ch is None:
             return
@@ -422,9 +390,6 @@ class MC2000BCleanGUI(tk.Tk):
             self._log(f"[{self._ts()}] ERROR phase: {e}\n")
 
     def apply_target_freq(self, value):
-        """
-        Sets TARGET frequency (setpoint). This MUST update the left "Target Frequency" readout.
-        """
         if self.ch is None:
             return
         try:
@@ -432,8 +397,7 @@ class MC2000BCleanGUI(tk.Tk):
             self.ch.freq = v
             self.target_set_var.set(v)
             self._log(f"[{self._ts()}] Set TARGET freq={v}\n")
-            # Refresh so left target updates immediately
-            self.refresh_once(log_it=False)
+            self.refresh_once(log_it=False)  # updates left target immediately
         except Exception as e:
             messagebox.showerror("Set Target Frequency failed", str(e))
             self._log(f"[{self._ts()}] ERROR target freq: {e}\n")
